@@ -3,7 +3,6 @@ import {
   Building2,
   Handshake,
   Briefcase,
-  Receipt,
   Loader2,
   Users2,
   FolderKanban,
@@ -27,7 +26,6 @@ import {
 import {
   callClientFlow, callDealStatusFlow, callDepartmentFlow, callPipelineProjectFlow, callProjectFlow, callUserFlow,
   callTimesheetFlow, callProjectApprovalFlow, callApprovalStatusFlow, callProjectDocumentFlow, callAuditLogFlow,
-  callInvoiceFlow,
 } from "../../api/flows";
 import { CHART_PALETTE, COLORS, cardStyle } from "../../constants/theme";
 import { formatINR } from "../../utils/format";
@@ -53,9 +51,12 @@ export function DashboardHome({ onOpenModule }) {
   const [dealStatuses, setDealStatuses] = useState([]);
   const [timesheets, setTimesheets] = useState([]);
   const [approvals, setApprovals] = useState([]);
-  const [invoices, setInvoices] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
+  // No `invoices` state — Link Invoice is parked (flow1 has no "Invoice"
+  // case yet; see modules.js). Adding it to the batch below made a single
+  // 502 from that call fail the whole Promise.all, blanking the entire
+  // dashboard. Restore this once that flow case is live.
 
   const [approvalStatuses, setApprovalStatuses] = useState([]);
 
@@ -74,9 +75,8 @@ export function DashboardHome({ onOpenModule }) {
     Promise.all([
       callDepartmentFlow("LIST"), callUserFlow("LIST"), callClientFlow("LIST"), callProjectFlow("LIST"),
       callPipelineProjectFlow("LIST"), callDealStatusFlow("LIST"), callApprovalStatusFlow("LIST"),
-      callInvoiceFlow("LIST"),
     ])
-      .then(([dept, usr, cli, proj, pipe, deals, apprStatus, inv]) => {
+      .then(([dept, usr, cli, proj, pipe, deals, apprStatus]) => {
         if (cancelled) return;
         setDepartments(dept.data);
         setUsers(usr.data);
@@ -85,7 +85,6 @@ export function DashboardHome({ onOpenModule }) {
         setPipeline(pipe.data);
         setDealStatuses(deals.data);
         setApprovalStatuses(apprStatus.data);
-        setInvoices(inv.data);
 
         return Promise.all([
           callTimesheetFlow("LIST"), callProjectApprovalFlow("LIST"),
@@ -138,9 +137,6 @@ export function DashboardHome({ onOpenModule }) {
   const pendingProjectApprovals = projects.filter((p) => !decidedProjectIds.has(String(p.guid))).length;
   const totalPendingApprovals = pendingTimesheets + pendingProjectApprovals;
 
-  const unlinkedInvoices = invoices.filter((i) => !i.billingId);
-  const totalInvoiceValue = invoices.reduce((s, i) => s + Number(i.amount || 0), 0);
-
   const kpisRow1 = [
     { label: "Active Departments", value: String(activeDepartments), icon: Building2, color: "#3B6FE0" },
     { label: "Open Projects", value: String(activeProjects), icon: FolderKanban, color: "#22A06B" },
@@ -151,7 +147,6 @@ export function DashboardHome({ onOpenModule }) {
   const kpisRow2 = [
     { label: "Open Pipeline Value", value: formatINR(pipelineValue), icon: Handshake, color: "#8B5CF6", sub: `${openPipeline.length} active deals` },
     { label: "Pending Approvals", value: String(totalPendingApprovals), icon: ClipboardCheck, color: "#F59E0B", sub: `${pendingTimesheets} timesheets · ${pendingProjectApprovals} projects` },
-    { label: "Unlinked Invoices", value: String(unlinkedInvoices.length), icon: Receipt, color: "#D6483E", sub: `${formatINR(totalInvoiceValue)} total tracked` },
     { label: "Documents on File", value: String(documents.length), icon: FileCheck, color: "#0EA5A4", sub: `${projects.length || pipeline.length} projects covered` },
   ];
 
@@ -359,13 +354,6 @@ export function DashboardHome({ onOpenModule }) {
               >
                 <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 600 }}>Project approvals pending</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#F59E0B" }}>{pendingProjectApprovals}</span>
-              </div>
-              <div
-                onClick={() => onOpenModule("link-invoice")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: COLORS.bg, borderRadius: 9, cursor: "pointer" }}
-              >
-                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 600 }}>Invoices to link</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.danger }}>{unlinkedInvoices.length}</span>
               </div>
             </div>
           </div>
